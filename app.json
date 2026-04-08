@@ -12,9 +12,14 @@
       "backgroundColor": "#0A0A0F"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.macroleague.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.macroleague.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -27,7 +32,15 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
-    ]
+      "expo-font",
+      "expo-web-browser",
+      "expo-dev-client"
+    ],
+    "scheme": "macroleague",
+    "extra": {
+      "eas": {
+        "projectId": "37420ff0-cd02-4700-8b7b-ddf0a271c58b"
+      }
+    }
   }
 }

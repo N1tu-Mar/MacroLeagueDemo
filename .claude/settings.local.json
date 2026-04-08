@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /Users/nityanthmaramreddy/Downloads/MacroLeagueX/MacroLeagueDemo/.env*)"
+    ]
+  }
+}

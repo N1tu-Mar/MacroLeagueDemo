@@ -22,7 +22,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
-import { mockAuth } from '../../lib/mockAuth';
+import { signInWithEmail, signInWithGoogle } from '../../lib/auth';
 import type { SignInScreenProps } from '../../navigation/types';
 
 export default function SignInScreen({ navigation }: SignInScreenProps) {
@@ -56,9 +56,8 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
     }
     setLoading(true);
     try {
-      await mockAuth.signInWithEmail(email.trim(), password);
-      // TODO: navigate to main app
-      Alert.alert('Success', 'Signed in! (Home screen coming soon)');
+      await signInWithEmail(email.trim(), password);
+      // Auth state listener in App.tsx handles navigation
     } catch (err: any) {
       shake();
       Alert.alert('Sign In Failed', err.message);
@@ -70,10 +69,12 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
     try {
-      await mockAuth.signInWithGoogle();
-      Alert.alert('Success', 'Signed in with Google! (Home screen coming soon)');
+      await signInWithGoogle();
+      // Auth state listener in App.tsx handles navigation
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      if (!err.message?.includes('cancelled')) {
+        Alert.alert('Error', err.message);
+      }
     } finally {
       setGoogleLoading(false);
     }
