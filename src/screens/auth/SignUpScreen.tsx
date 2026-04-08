@@ -30,7 +30,8 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
-import { mockAuth, calculateMacros, UserProfile } from '../../lib/mockAuth';
+import { signUpWithEmail, signInWithGoogle } from '../../lib/auth';
+import { calculateMacros, UserProfile } from '../../lib/mockAuth';
 import type { SignUpScreenProps } from '../../navigation/types';
 
 const { width } = Dimensions.get('window');
@@ -264,14 +265,7 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   async function handleSubmit() {
     setLoading(true);
     try {
-      await mockAuth.signUpWithEmail(
-        email.trim(),
-        password,
-        name.trim(),
-        university,
-        goalType,
-        macros
-      );
+      await signUpWithEmail(email.trim(), password);
       setDone(true);
     } catch (err: any) {
       Alert.alert('Sign Up Failed', err.message);
@@ -283,10 +277,12 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   async function handleGoogleSignUp() {
     setLoading(true);
     try {
-      await mockAuth.signInWithGoogle();
-      setDone(true);
+      await signInWithGoogle();
+      // Auth state listener in App.tsx handles navigation
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      if (!err.message?.includes('cancelled')) {
+        Alert.alert('Error', err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -301,7 +297,14 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
           <SuccessCheck />
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => Alert.alert('Coming soon', 'Home screen coming next!')}
+            onPress={async () => {
+              // If Supabase auto-confirmed, auth listener already logged us in.
+              // If not, manually trigger login with demo data as fallback.
+              const { useUserStore } = require('../../store/userStore');
+              if (!useUserStore.getState().isAuthenticated) {
+                useUserStore.getState().login();
+              }
+            }}
           >
             <LinearGradient colors={[Colors.primary, '#00C96A']} style={styles.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Text style={styles.primaryButtonText}>Let's Go →</Text>

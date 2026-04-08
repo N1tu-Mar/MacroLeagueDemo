@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  Alert,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -23,6 +24,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
+import { signInWithGoogle } from '../../lib/auth';
 import type { WelcomeScreenProps } from '../../navigation/types';
 
 const { width, height } = Dimensions.get('window');
@@ -116,6 +118,22 @@ function GlowOrb() {
 }
 
 export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
+  const [googleLoading, setGoogleLoading] = React.useState(false);
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+      // Auth state listener in App.tsx handles the rest
+    } catch (err: any) {
+      if (!err.message?.includes('cancelled')) {
+        Alert.alert('Google Sign In Failed', err.message);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -173,13 +191,16 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
           {/* Google Sign In */}
           <TouchableOpacity
             style={styles.googleButton}
-            onPress={() => navigation.navigate('SignUp')}
+            onPress={handleGoogleSignIn}
             activeOpacity={0.85}
+            disabled={googleLoading}
           >
             <View style={styles.googleIcon}>
               <Text style={styles.googleG}>G</Text>
             </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Text style={styles.googleButtonText}>
+              {googleLoading ? 'Signing in...' : 'Continue with Google'}
+            </Text>
           </TouchableOpacity>
 
           {/* Divider */}

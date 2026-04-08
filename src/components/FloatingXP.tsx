@@ -1,0 +1,69 @@
+import React, { useEffect } from 'react';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Colors, FontFamily } from '../theme';
+
+interface FloatingXPProps {
+  amount: number;
+  visible: boolean;
+  onDone?: () => void;
+}
+
+export default function FloatingXP({ amount, visible, onDone }: FloatingXPProps) {
+  const translateY = useSharedValue(0);
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.5);
+
+  useEffect(() => {
+    if (visible) {
+      translateY.value = 0;
+      opacity.value = 0;
+      scale.value = 0.5;
+
+      opacity.value = withTiming(1, { duration: 200 });
+      scale.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.back(2)) });
+      translateY.value = withTiming(-80, { duration: 1500, easing: Easing.out(Easing.cubic) });
+      opacity.value = withDelay(
+        1000,
+        withTiming(0, { duration: 500 }, (finished) => {
+          if (finished && onDone) runOnJS(onDone)();
+        })
+      );
+    }
+  }, [visible]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  if (!visible) return null;
+
+  return (
+    <Animated.Text style={[styles.text, animatedStyle]}>
+      +{amount} XP
+    </Animated.Text>
+  );
+}
+
+const styles = StyleSheet.create({
+  text: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '40%',
+    fontFamily: FontFamily.displayBold,
+    fontSize: 28,
+    color: Colors.primary,
+    textShadowColor: Colors.primary + '66',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+    zIndex: 999,
+  },
+});
