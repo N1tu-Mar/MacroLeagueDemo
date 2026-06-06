@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Framekit</string>
+    <string name="login_title">Welcome to Framekit</string>
+    <string name="login_subtitle">Sign in to continue</string>
+    <string name="sign_in_with_google">Continue with Google</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="signed_in_success">Signed in successfully</string>
+</resources>
