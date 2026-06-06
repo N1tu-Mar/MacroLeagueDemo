@@ -2,16 +2,22 @@ import { supabase } from './supabase';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { Platform } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
 /**
  * Returns the correct redirect URI for the current environment:
+ *   - Web               → http://localhost:8081 (current origin)
  *   - Expo Go           → exp://192.168.x.x:8081/--/auth  (dynamic, set via Supabase wildcard)
  *   - Dev client / EAS  → macroleague://auth
  *   - Standalone        → macroleague://auth
  */
 function getRedirectUri(): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
   const isExpoGo =
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
@@ -63,7 +69,8 @@ export async function signInWithGoogle() {
     provider: 'google',
     options: {
       redirectTo,
-      skipBrowserRedirect: true,
+      // Web: full-page redirect. Mobile: open an in-app browser session.
+      skipBrowserRedirect: Platform.OS !== 'web',
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -83,6 +90,11 @@ export async function signInWithGoogle() {
       );
     }
     throw error;
+  }
+
+  if (Platform.OS === 'web') {
+    // Supabase redirects the browser when skipBrowserRedirect is false.
+    return data;
   }
 
   if (!data.url) throw new Error('No OAuth URL returned from Supabase.');
