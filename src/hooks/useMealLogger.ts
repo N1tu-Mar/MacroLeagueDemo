@@ -2,9 +2,11 @@ import { useCallback, useRef, useState } from 'react';
 import {
   DatabaseError,
   logMeal,
+  MealEstimateMeta,
   MealType,
   ValidationError,
 } from '../services/mealLogService';
+import { MealEstimateCandidate } from '../services/nutrition/types';
 import { generateRequestId } from '../utils/clientRequestId';
 
 export interface MealLogFields {
@@ -41,7 +43,10 @@ function toUserFacingError(error: unknown): string {
   }
 
   if (error instanceof DatabaseError) {
-    return 'We could not save that meal. Please try again.';
+    // describeDbError already turned the Postgres failure into plain language,
+    // so show it instead of an opaque "please try again" that hides the cause.
+    console.error('[useMealLogger] save failed', error.code, error.cause ?? error);
+    return error.message || 'We could not save that meal. Please try again.';
   }
 
   if (error instanceof Error) {
@@ -51,6 +56,10 @@ function toUserFacingError(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+function formatNumeric(value: number): string {
+  return Number.isFinite(value) ? String(value) : '';
+}
+
 export function useMealLogger(): {
   fields: MealLogFields;
   setField: (field: keyof MealLogFields, value: string) => void;
@@ -58,6 +67,8 @@ export function useMealLogger(): {
   setMealType: (type: MealType) => void;
   isSubmitting: boolean;
   error: string | null;
+  appliedEstimateName: string | null;
+  applyEstimate: (candidate: MealEstimateCandidate) => void;
   submit: () => Promise<void>;
   reset: () => void;
 } {
@@ -65,16 +76,46 @@ export function useMealLogger(): {
   const [mealType, setMealType] = useState<MealType>('lunch');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appliedEstimateName, setAppliedEstimateName] = useState<string | null>(null);
   const requestIdRef = useRef(generateRequestId());
+  // Provenance for an applied estimate, carried through to logMeal on submit.
+  const metaRef = useRef<MealEstimateMeta | null>(null);
 
   const setField = useCallback((field: keyof MealLogFields, value: string) => {
     setFields((currentFields) => ({ ...currentFields, [field]: value }));
+  }, []);
+
+  const applyEstimate = useCallback((candidate: MealEstimateCandidate) => {
+    const { serving } = candidate;
+    setFields({
+      // meal_logs.free_text is capped at 200 chars; USDA names can be longer.
+      freeText: candidate.name.slice(0, 200),
+      calories: formatNumeric(serving.calories),
+      proteinG: formatNumeric(serving.proteinG),
+      carbsG: formatNumeric(serving.carbsG),
+      fatG: formatNumeric(serving.fatG),
+      quantity: '1',
+    });
+    metaRef.current = {
+      source: 'user_estimate',
+      sourceFoodId: candidate.foodId,
+      confidence: candidate.confidence,
+      saturatedFatG: serving.saturatedFatG,
+      transFatG: serving.transFatG,
+      unsaturatedFatG: serving.unsaturatedFatG,
+      fiberG: serving.fiberG,
+      sodiumMg: serving.sodiumMg,
+    };
+    setAppliedEstimateName(candidate.name);
+    setError(null);
   }, []);
 
   const reset = useCallback(() => {
     setFields(EMPTY_FIELDS);
     setMealType('lunch');
     setError(null);
+    setAppliedEstimateName(null);
+    metaRef.current = null;
   }, []);
 
   const submit = useCallback(async () => {
@@ -95,6 +136,7 @@ export function useMealLogger(): {
         quantity: parseFormNumber('quantity', fields.quantity),
         mealType,
         clientRequestId: requestIdRef.current,
+        ...(metaRef.current ?? {}),
       });
 
       requestIdRef.current = generateRequestId();
@@ -113,6 +155,8 @@ export function useMealLogger(): {
     setMealType,
     isSubmitting,
     error,
+    appliedEstimateName,
+    applyEstimate,
     submit,
     reset,
   };

@@ -32,6 +32,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import { signUpWithEmail, signInWithGoogle } from '../../lib/auth';
 import { calculateMacros, UserProfile } from '../../lib/mockAuth';
+import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import type { SignUpScreenProps } from '../../navigation/types';
 
 const { width } = Dimensions.get('window');
@@ -265,7 +266,16 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   async function handleSubmit() {
     setLoading(true);
     try {
-      await signUpWithEmail(email.trim(), password);
+      const authData = await signUpWithEmail(email.trim(), password);
+      if (authData.user) {
+        await updateOnboardingProfile(authData.user.id, {
+          username: slugifyUsername(name || email.split('@')[0]),
+          goalCalories: macros.calories,
+          goalProteinG: macros.protein,
+          goalCarbsG: macros.carbs,
+          goalUnsaturatedFatG: macros.fats,
+        });
+      }
       setDone(true);
     } catch (err: any) {
       Alert.alert('Sign Up Failed', err.message);

@@ -3,6 +3,24 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+export type MealSource = 'manual' | 'usda_fdc' | 'user_estimate';
+
+/**
+ * Optional provenance + extended-nutrition fields written when a meal comes from
+ * the natural-language estimate flow. All nullable so the manual path is
+ * unaffected and existing callers need not pass them.
+ */
+export interface MealEstimateMeta {
+  source?: MealSource | null;
+  sourceFoodId?: string | null;
+  confidence?: number | null;
+  saturatedFatG?: number | null;
+  transFatG?: number | null;
+  unsaturatedFatG?: number | null;
+  fiberG?: number | null;
+  sodiumMg?: number | null;
+}
+
 export interface MealLog {
   id: string;
   userId: string;
@@ -28,7 +46,7 @@ export interface DailyTotals {
   mealCount: number;
 }
 
-export interface LogMealParams {
+export interface LogMealParams extends MealEstimateMeta {
   freeText: string;
   calories: number;
   proteinG: number;
@@ -83,12 +101,46 @@ export class ValidationError extends Error {
 
 export class DatabaseError extends Error {
   cause: unknown;
+  code?: string;
 
   constructor(message: string, cause: unknown) {
     super(message);
     this.name = 'DatabaseError';
     this.cause = cause;
+    if (isDbError(cause) && typeof cause.code === 'string') {
+      this.code = cause.code;
+    }
   }
+}
+
+/**
+ * Builds a human-readable, support-friendly description of a Postgres/PostgREST
+ * error so save failures stop collapsing into an opaque generic string.
+ */
+export function describeDbError(error: unknown): string {
+  if (!isDbError(error)) {
+    return 'Unknown database error.';
+  }
+
+  const code = error.code ?? '';
+
+  // Map the failure modes that actually block meal inserts to plain language.
+  if (code === '23503') {
+    // foreign_key_violation — almost always a missing profile row for this user.
+    return 'Your profile is not set up yet. Please finish onboarding, then try again.';
+  }
+  if (code === '42501' || /row-level security/i.test(error.message ?? '')) {
+    return 'You are not signed in with permission to save this meal. Please sign in again.';
+  }
+  if (code === '23514') {
+    return `That meal breaks a data rule (${error.details ?? error.message ?? 'check constraint'}).`;
+  }
+  if (code === '23502') {
+    return 'A required field is missing.';
+  }
+
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  return parts.length > 0 ? parts.join(' — ') : 'Database request failed.';
 }
 
 export class NotFoundError extends Error {
@@ -195,8 +247,47 @@ function validateLogMealParams(params: LogMealParams): ValidatedLogMealParams {
   validateMealType(validated.mealType);
   validateDate('eatenAt', validated.eatenAt);
   validateClientRequestId(validated.clientRequestId);
+  validateOptionalMeta(validated);
 
   return validated;
+}
+
+function validateOptionalMeta(meta: MealEstimateMeta): void {
+  const nonNegativeFields: (keyof MealEstimateMeta)[] = [
+    'saturatedFatG',
+    'transFatG',
+    'unsaturatedFatG',
+    'fiberG',
+    'sodiumMg',
+  ];
+  for (const field of nonNegativeFields) {
+    const value = meta[field];
+    if (value !== undefined && value !== null) {
+      validateNumber(field, value as number, 0, 'a non-negative number');
+    }
+  }
+  if (meta.confidence !== undefined && meta.confidence !== null) {
+    if (!Number.isFinite(meta.confidence) || meta.confidence < 0 || meta.confidence > 1) {
+      throw new ValidationError('confidence', 'confidence must be between 0 and 1.');
+    }
+  }
+}
+
+function buildMetaPayload(meta: MealEstimateMeta): Record<string, string | number | null> {
+  const payload: Record<string, string | number | null> = {};
+  if (meta.source !== undefined) payload.source = meta.source;
+  if (meta.sourceFoodId !== undefined) payload.source_food_id = meta.sourceFoodId;
+  if (meta.confidence !== undefined) payload.confidence = meta.confidence;
+  if (meta.saturatedFatG !== undefined) payload.saturated_fat_g = meta.saturatedFatG;
+  if (meta.transFatG !== undefined) payload.trans_fat_g = meta.transFatG;
+  if (meta.unsaturatedFatG !== undefined) payload.unsaturated_fat_g = meta.unsaturatedFatG;
+  if (meta.fiberG !== undefined) payload.fiber_g = meta.fiberG;
+  if (meta.sodiumMg !== undefined) payload.sodium_mg = meta.sodiumMg;
+  // Mark when an estimate (non-manual source) was confirmed by the user.
+  if (meta.source !== undefined && meta.source !== null && meta.source !== 'manual') {
+    payload.user_confirmed_at = new Date().toISOString();
+  }
+  return payload;
 }
 
 function validateEditableFields(params: Partial<EditableMealFields>): Partial<EditableMealFields> {
@@ -286,6 +377,7 @@ export async function logMeal(params: LogMealParams): Promise<MealLog> {
     meal_type: validated.mealType,
     eaten_at: validated.eatenAt.toISOString(),
     client_request_id: validated.clientRequestId,
+    ...buildMetaPayload(validated),
   };
 
   const { data, error } = await supabase
@@ -310,7 +402,8 @@ export async function logMeal(params: LogMealParams): Promise<MealLog> {
       return mapMealLog(existingRow);
     }
 
-    throw new DatabaseError('Unable to log meal.', error);
+    console.error('[mealLogService] meal insert failed', error);
+    throw new DatabaseError(describeDbError(error), error);
   }
 
   if (!data) {
