@@ -83,7 +83,8 @@ export default function MealLoggerScreen() {
               <TotalPill label="Cal" value={formatMacro(daily.totals.calories)} goal={formatGoal(daily.goals?.calories, '')} />
               <TotalPill label="Protein" value={`${formatMacro(daily.totals.proteinG)}g`} goal={formatGoal(daily.goals?.proteinG, 'g')} />
               <TotalPill label="Carbs" value={`${formatMacro(daily.totals.carbsG)}g`} goal={formatGoal(daily.goals?.carbsG, 'g')} />
-              <TotalPill label="Fat" value={`${formatMacro(daily.totals.fatG)}g`} goal={formatGoal(daily.goals?.fatG, 'g')} />
+              <TotalPill label="Unsat Fat" value={`${formatMacro(daily.totals.fatG)}g`} goal={formatGoal(daily.goals?.unsaturatedFatG, 'g')} />
+              <TotalPill label="Trans Fat" value="—" goal={formatGoal(daily.goals?.transFatG, 'g')} />
             </View>
           )}
         </View>

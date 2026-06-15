@@ -11,7 +11,8 @@ export interface ProfileGoals {
   calories: number | null;
   proteinG: number | null;
   carbsG: number | null;
-  fatG: number | null;
+  unsaturatedFatG: number | null;
+  transFatG: number | null;
 }
 
 type ProfileRow = {
@@ -19,7 +20,8 @@ type ProfileRow = {
   goal_calories: number | null;
   goal_protein_g: number | null;
   goal_carbs_g: number | null;
-  goal_fat_g: number | null;
+  goal_unsaturated_fat_g: number | null;
+  goal_trans_fat_g: number | null;
 };
 
 type ProfileState = {
@@ -50,7 +52,7 @@ async function fetchProfile(): Promise<ProfileState> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('timezone, goal_calories, goal_protein_g, goal_carbs_g, goal_fat_g')
+    .select('timezone, goal_calories, goal_protein_g, goal_carbs_g, goal_unsaturated_fat_g, goal_trans_fat_g')
     .eq('id', userData.user.id)
     .single<ProfileRow>();
 
@@ -67,7 +69,8 @@ async function fetchProfile(): Promise<ProfileState> {
       calories: data.goal_calories,
       proteinG: data.goal_protein_g,
       carbsG: data.goal_carbs_g,
-      fatG: data.goal_fat_g,
+      unsaturatedFatG: data.goal_unsaturated_fat_g,
+      transFatG: data.goal_trans_fat_g,
     },
   };
 }
