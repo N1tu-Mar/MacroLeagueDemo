@@ -1,10 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   DatabaseError,
-  editMeal,
   logMeal,
   MealEstimateMeta,
-  MealLog,
   MealType,
   ValidationError,
 } from '../services/mealLogService';
@@ -70,11 +68,8 @@ export function useMealLogger(): {
   isSubmitting: boolean;
   error: string | null;
   appliedEstimateName: string | null;
-  editingId: string | null;
   applyEstimate: (candidate: MealEstimateCandidate) => void;
-  beginEdit: (meal: MealLog) => void;
-  cancelEdit: () => void;
-  submit: () => Promise<MealLog | null>;
+  submit: () => Promise<void>;
   reset: () => void;
 } {
   const [fields, setFields] = useState<MealLogFields>(EMPTY_FIELDS);
@@ -82,8 +77,6 @@ export function useMealLogger(): {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appliedEstimateName, setAppliedEstimateName] = useState<string | null>(null);
-  // When set, submit() updates this existing meal instead of inserting a new one.
-  const [editingId, setEditingId] = useState<string | null>(null);
   const requestIdRef = useRef(generateRequestId());
   // Provenance for an applied estimate, carried through to logMeal on submit.
   const metaRef = useRef<MealEstimateMeta | null>(null);
@@ -122,40 +115,19 @@ export function useMealLogger(): {
     setMealType('lunch');
     setError(null);
     setAppliedEstimateName(null);
-    setEditingId(null);
     metaRef.current = null;
   }, []);
 
-  const beginEdit = useCallback((meal: MealLog) => {
-    setFields({
-      freeText: meal.freeText,
-      calories: formatNumeric(meal.calories),
-      proteinG: formatNumeric(meal.proteinG),
-      carbsG: formatNumeric(meal.carbsG),
-      fatG: formatNumeric(meal.fatG),
-      quantity: formatNumeric(meal.quantity),
-    });
-    setMealType(meal.mealType);
-    setEditingId(meal.id);
-    setAppliedEstimateName(null);
-    setError(null);
-    metaRef.current = null;
-  }, []);
-
-  const cancelEdit = useCallback(() => {
-    reset();
-  }, [reset]);
-
-  const submit = useCallback(async (): Promise<MealLog | null> => {
+  const submit = useCallback(async () => {
     if (isSubmitting) {
-      return null;
+      return;
     }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const parsed = {
+      await logMeal({
         freeText: fields.freeText,
         calories: parseFormNumber('calories', fields.calories),
         proteinG: parseFormNumber('proteinG', fields.proteinG),
@@ -163,35 +135,18 @@ export function useMealLogger(): {
         fatG: parseFormNumber('fatG', fields.fatG),
         quantity: parseFormNumber('quantity', fields.quantity),
         mealType,
-      };
-
-      // Edit path: update the existing row in place (no new idempotency key).
-      if (editingId) {
-        const updated = await editMeal(editingId, parsed);
-        reset();
-        return updated;
-      }
-
-      const saved = await logMeal({
-        ...parsed,
         clientRequestId: requestIdRef.current,
-        // Default manual provenance; an applied estimate (metaRef) overrides it.
-        source: 'manual',
         ...(metaRef.current ?? {}),
       });
 
-      // Only rotate the idempotency key after a confirmed success so a retried
-      // save reuses the same client_request_id and cannot create a duplicate.
       requestIdRef.current = generateRequestId();
       reset();
-      return saved;
     } catch (caughtError) {
       setError(toUserFacingError(caughtError));
-      return null;
     } finally {
       setIsSubmitting(false);
     }
-  }, [fields, isSubmitting, mealType, editingId, reset]);
+  }, [fields, isSubmitting, mealType, reset]);
 
   return {
     fields,
@@ -201,10 +156,7 @@ export function useMealLogger(): {
     isSubmitting,
     error,
     appliedEstimateName,
-    editingId,
     applyEstimate,
-    beginEdit,
-    cancelEdit,
     submit,
     reset,
   };

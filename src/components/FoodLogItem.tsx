@@ -1,11 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontFamily } from '../theme';
-import { MealLog } from '../services/mealLogService';
+import { MealLog } from '../types';
 
 interface FoodLogItemProps {
   meal: MealLog;
 }
+
+const SOURCE_ICONS: Record<string, string> = {
+  ai_scan: '📷',
+  search: '🔍',
+  dining_hall: '🍽️',
+  manual: '✏️',
+};
 
 const MEAL_ICONS: Record<string, string> = {
   breakfast: '🌅',
@@ -14,16 +21,8 @@ const MEAL_ICONS: Record<string, string> = {
   snack: '🍎',
 };
 
-function formatMacro(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
 export default function FoodLogItem({ meal }: FoodLogItemProps) {
-  const time = new Date(meal.eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const calories = meal.calories * meal.quantity;
-  const protein = meal.proteinG * meal.quantity;
-  const carbs = meal.carbsG * meal.quantity;
-  const fat = meal.fatG * meal.quantity;
+  const time = new Date(meal.loggedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   return (
     <View style={styles.container}>
@@ -31,16 +30,14 @@ export default function FoodLogItem({ meal }: FoodLogItemProps) {
         <Text style={styles.mealIcon}>{MEAL_ICONS[meal.mealType] ?? '🍽️'}</Text>
       </View>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{meal.freeText}</Text>
+        <Text style={styles.name} numberOfLines={1}>{meal.mealName}</Text>
         <Text style={styles.meta}>
-          {time} · {meal.mealType}
+          {time} · {SOURCE_ICONS[meal.source] ?? ''} {meal.source.replace('_', ' ')}
         </Text>
       </View>
       <View style={styles.macros}>
-        <Text style={styles.cal}>{formatMacro(calories)} cal</Text>
-        <Text style={styles.macroDetail}>
-          {formatMacro(protein)}P · {formatMacro(carbs)}C · {formatMacro(fat)}F
-        </Text>
+        <Text style={styles.cal}>{meal.calories} cal</Text>
+        <Text style={styles.macroDetail}>{meal.protein}P · {meal.carbs}C · {meal.fats}F</Text>
       </View>
     </View>
   );
