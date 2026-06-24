@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,9 @@ import { FatSubtypeTotal, MealLog, MealType } from '../../services/mealLogServic
 import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
 import { useMealEstimate } from '../../hooks/useMealEstimate';
 import { MealEstimateCandidate } from '../../services/nutrition/types';
+import { useUserStore } from '../../store/userStore';
+import { BASE_MEAL_XP, BASE_MEAL_POINTS } from '../../services/gamificationService';
+import FloatingXP from '../../components/FloatingXP';
 import { Colors, FontFamily } from '../../theme';
 
 type EntryMode = 'manual' | 'describe';
@@ -75,11 +78,43 @@ export default function MealLoggerScreen() {
   const logger = useMealLogger();
   const estimate = useMealEstimate();
   const daily = useDailyTotals(today);
+  const refreshStats = useUserStore((s) => s.refreshStats);
   const [entryMode, setEntryMode] = useState<EntryMode>('manual');
+  // Post-log feedback: the floating "+XP" animation and a short-lived toast.
+  const [showXp, setShowXp] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) {
+        clearTimeout(toastTimer.current);
+      }
+    };
+  }, []);
 
   async function handleSubmit(): Promise<void> {
-    await logger.submit();
+    const result = await logger.submit();
     daily.refresh();
+    if (!result.logged) {
+      return;
+    }
+
+    // Optimistic, immediate feedback from the known base award (mirrors the DB
+    // trigger constants). The authoritative totals are pulled right after.
+    setShowXp(true);
+    setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts`);
+
+    await refreshStats();
+    const streak = useUserStore.getState().user?.streakCount ?? 0;
+    if (streak > 0) {
+      setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts · 🔥 ${streak}-day streak`);
+    }
+
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
   }
 
   function handleUseCandidate(candidate: MealEstimateCandidate): void {
@@ -287,6 +322,14 @@ export default function MealLoggerScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Post-log feedback overlay. pointerEvents="none" so it never blocks taps. */}
+      {toast && (
+        <View style={styles.feedbackToast} pointerEvents="none">
+          <Text style={styles.feedbackToastText}>{toast}</Text>
+        </View>
+      )}
+      <FloatingXP amount={BASE_MEAL_XP} visible={showXp} onDone={() => setShowXp(false)} />
     </View>
   );
 }
@@ -504,6 +547,22 @@ function MealRow({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  feedbackToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 50,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    zIndex: 1000,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  feedbackToastText: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.background },
   topBar: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
   title: {
     fontFamily: FontFamily.displayBold,

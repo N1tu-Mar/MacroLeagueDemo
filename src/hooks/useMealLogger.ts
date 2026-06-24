@@ -127,7 +127,12 @@ export function useMealLogger(): {
   cancelEdit: () => void;
   /** Delete an existing meal by id. Returns true on success. */
   removeMeal: (id: string) => Promise<boolean>;
-  submit: () => Promise<void>;
+  /**
+   * Save the form. Resolves `{ logged: true }` only when a NEW meal was inserted
+   * (so the caller can fire post-log XP/streak feedback); an in-place edit or any
+   * failure resolves `{ logged: false }`.
+   */
+  submit: () => Promise<{ logged: boolean }>;
   reset: () => void;
 } {
   const [fields, setFields] = useState<MealLogFields>(EMPTY_FIELDS);
@@ -227,9 +232,9 @@ export function useMealLogger(): {
     }
   }, [reset]);
 
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (): Promise<{ logged: boolean }> => {
     if (isSubmitting) {
-      return;
+      return { logged: false };
     }
 
     setIsSubmitting(true);
@@ -261,7 +266,9 @@ export function useMealLogger(): {
         // mint a new idempotency key — this is an update, not a new insert.
         await editMeal(editingId, { ...core, ...fatBreakdown });
         reset();
-        return;
+        // An edit updates an existing row; the award trigger fires on INSERT only,
+        // so no new XP/streak is granted and the caller shows no feedback.
+        return { logged: false };
       }
 
       // Provenance (USDA food id, confidence, fiber/sodium) survives edits; an
@@ -280,8 +287,10 @@ export function useMealLogger(): {
       // save reuses the same client_request_id and cannot create a duplicate.
       requestIdRef.current = generateRequestId();
       reset();
+      return { logged: true };
     } catch (caughtError) {
       setError(toUserFacingError(caughtError));
+      return { logged: false };
     } finally {
       setIsSubmitting(false);
     }

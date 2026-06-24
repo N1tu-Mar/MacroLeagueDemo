@@ -149,7 +149,7 @@ export interface ProfileStats {
   level: number;
 }
 
-// XP per level. Mirrors data/mockData.getXpForLevel so the level shown on Home,
+// XP per level. Mirrors lib/leveling.getXpForLevel so the level shown on Home,
 // Profile, and the XP bar all agree. Kept here so the gamification read is the
 // single source of the level number once stats are backend-owned.
 const XP_PER_LEVEL = 500;
@@ -191,6 +191,41 @@ export async function getProfileStats(userId: string): Promise<ProfileStats> {
     totalMealsLogged: data.total_meals_logged ?? 0,
     challengesWon: data.challenges_won ?? 0,
     level: levelFromXp(xp),
+  };
+}
+
+export interface ProfileIdentity {
+  username: string;
+  displayName: string | null;
+  university: string | null;
+  goalType: string | null;
+}
+
+/**
+ * Loads the user-editable identity/display fields (added in migration 0006) so the
+ * app can show the real saved name/university/goal instead of placeholders derived
+ * from the auth email. RLS ("read own profile") restricts this to the caller.
+ */
+export async function getProfileIdentity(userId: string): Promise<ProfileIdentity> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('username, display_name, university, goal_type')
+    .eq('id', userId)
+    .maybeSingle<{
+      username: string | null;
+      display_name: string | null;
+      university: string | null;
+      goal_type: string | null;
+    }>();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+
+  return {
+    username: data.username ?? 'user',
+    displayName: data.display_name,
+    university: data.university,
+    goalType: data.goal_type,
   };
 }
 
